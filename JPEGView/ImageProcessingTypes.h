@@ -36,6 +36,7 @@ enum EImageFormat {
 	IF_GIF,
 	IF_TIFF,
 	IF_WEBP,
+	IF_WLEP,
 	IF_WIC,
 	IF_CLIPBOARD,
 	IF_CameraRAW,

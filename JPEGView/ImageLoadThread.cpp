@@ -12,6 +12,7 @@
 #include "dcraw_mod.h"
 #include "TJPEGWrapper.h"
 #include "MaxImageDef.h"
+#include "wlep_lib.h"
 
 using namespace Gdiplus;
 
@@ -244,6 +245,10 @@ void CImageLoadThread::ProcessRequest(CRequestBase& request) {
 			DeleteCachedGDIBitmap();
 			ProcessReadWICRequest(&rq);
 			break;
+		case IF_WLEP:
+			DeleteCachedGDIBitmap();
+			ProcessReadWLEPRequest(&rq);
+			break;
 		default:
 			// try with GDI+
 			ProcessReadGDIPlusRequest(&rq);
@@ -396,6 +401,15 @@ void CImageLoadThread::ProcessReadTGARequest(CRequest * request) {
 
 __declspec(dllimport) int Webp_Dll_GetInfo(const uint8* data, size_t data_size, int* width, int* height);
 __declspec(dllimport) uint8* Webp_Dll_DecodeBGRInto(const uint8* data, uint32 data_size, uint8* output_buffer, int output_buffer_size, int output_stride);
+
+void CImageLoadThread::ProcessReadWLEPRequest(CRequest * request) {
+	// TODO: Implement WinLep here
+	
+	const std::string filename = std::string(CT2CA(request->FileName));
+	const auto data = convertLeptonToJpg(filename);
+	data.size();
+
+}
 
 void CImageLoadThread::ProcessReadWEBPRequest(CRequest * request) {
 	HANDLE hFile = ::CreateFile(request->FileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
