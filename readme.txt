@@ -1,6 +1,16 @@
 JPEGView source code readme
 ***************************
 
+This fork of JPEGView contains support of wlep file format. It is an extension
+of Lepton format by Dropbox. Lepton allows to losslessly compress JPEG files by
+22%. Wlep format adds support for thumbnails that can be shown in Windows Shell.
+
+As of now, this fork of JPEGView supports just the wlep format. Support for
+unmodified lep is planned.
+
+Wlep format is still actively developed and no forward compatibility is
+guaranteed (yet).
+
 To compile JPEGView you need:
 
 - Visual Studio 2010 (JPEGView 32 bit version supported) or
@@ -8,10 +18,17 @@ To compile JPEGView you need:
   Visual Studio 2017 professional (JPEGView 32 and 64 bit versions supported) 
 - Windows Template Library (WTL), Version 8.1 (http://sourceforge.net/projects/wtl/) installed to
   $(VCInstallDir)WTL\
+- WinLep (https://github.com/Lepton-team/WinLep) cloned to the same directory as
+  JPEGView source root. Your directory structure should look like this:
+  - projects\
+    - JPEGView\
+    - WinLep\
 
 The include directories of WTL must be added to the include directories for VC++:
 In Visual Studio: Properties of JPEGView project > VC++-Directories-Include Directories and Library Directories 
                   Include Directories: $(VCInstallDir)WTL\Include;$(IncludePath)
+
+WinLep is already included in the project. You should need to compile it first.
 
 Please note: 
 Windows XP SP2 or later is needed to run the 32 bit version.

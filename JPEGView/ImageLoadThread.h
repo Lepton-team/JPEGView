@@ -101,6 +101,8 @@ private:
 	void ProcessReadWLEPRequest(CRequest *request);
 	void ProcessReadRAWRequest(CRequest * request);
 	void ProcessReadGDIPlusRequest(CRequest * request);
+	void ProcessReadWlepGDIPlusRequest(CRequest * request,
+					   IStream * stream);
 	void ProcessReadWICRequest(CRequest* request);
 
 	static void SetFileDependentProcessParams(CRequest * request);

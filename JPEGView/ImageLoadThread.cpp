@@ -402,15 +402,6 @@ void CImageLoadThread::ProcessReadTGARequest(CRequest * request) {
 __declspec(dllimport) int Webp_Dll_GetInfo(const uint8* data, size_t data_size, int* width, int* height);
 __declspec(dllimport) uint8* Webp_Dll_DecodeBGRInto(const uint8* data, uint32 data_size, uint8* output_buffer, int output_buffer_size, int output_stride);
 
-void CImageLoadThread::ProcessReadWLEPRequest(CRequest * request) {
-	// TODO: Implement WinLep here
-	
-	const std::string filename = std::string(CT2CA(request->FileName));
-	const auto data = convertLeptonToJpg(filename);
-	data.size();
-
-}
-
 void CImageLoadThread::ProcessReadWEBPRequest(CRequest * request) {
 	HANDLE hFile = ::CreateFile(request->FileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
 	if (hFile == INVALID_HANDLE_VALUE) {
@@ -463,6 +454,88 @@ void CImageLoadThread::ProcessReadWEBPRequest(CRequest * request) {
 	delete[] pBuffer;
 }
 
+static inline std::wstring ToWString(const CString& s) {
+	if (!s.IsEmpty())
+		return std::wstring(s, s.GetLength());
+	else
+		return std::wstring();
+}
+
+void CImageLoadThread::ProcessReadWLEPRequest(CRequest * request) {
+	BYTE* pBuffer = nullptr;
+	try {
+		unsigned int nFileSize = 0;
+		std::wstring file_name = ::ToWString(request->FileName);
+		pBuffer = (BYTE*) ::wlepToJpg(file_name, &nFileSize);
+		if (pBuffer == NULL) {
+			request->OutOfMemory = true;
+			return;
+		}
+		// Don't read too huge files
+		if (nFileSize > MAX_JPEG_FILE_SIZE) {
+			request->OutOfMemory = true;
+			if (pBuffer) ::HeapFree(GetProcessHeap(), 0, pBuffer);
+			return;
+		}
+		if (CSettingsProvider::This().ForceGDIPlus() || CSettingsProvider::This().UseEmbeddedColorProfiles()) {
+			IStream* pStream = SHCreateMemStream(pBuffer, nFileSize);
+			if (pStream != nullptr) {
+				Gdiplus::Bitmap* pBitmap = Gdiplus::Bitmap::FromStream(pStream, CSettingsProvider::This().UseEmbeddedColorProfiles());
+				bool isOutOfMemory, isAnimatedGIF;
+				request->Image = ConvertGDIPlusBitmapToJPEGImage(pBitmap, 0, Helpers::FindEXIFBlock(pBuffer, nFileSize),
+										 Helpers::CalculateJPEGFileHash(pBuffer, nFileSize), isOutOfMemory, isAnimatedGIF);
+				request->OutOfMemory = request->Image == NULL && isOutOfMemory;
+				if (request->Image != NULL) {
+					request->Image->SetJPEGComment(Helpers::GetJPEGComment(pBuffer, nFileSize));
+				}
+				pStream->Release();
+				delete pBitmap;
+			} else {
+				request->OutOfMemory = true;
+			}
+		} else {
+			int nWidth, nHeight, nBPP;
+			TJSAMP eChromoSubSampling;
+			bool bOutOfMemory;
+			// int nTicks = ::GetTickCount();
+
+			void* pPixelData = TurboJpeg::ReadImage(nWidth, nHeight, nBPP, eChromoSubSampling, bOutOfMemory, pBuffer, nFileSize);
+
+			/*
+			  TCHAR buffer[20];
+			  _stprintf_s(buffer, 20, _T("%d"), ::GetTickCount() - nTicks);
+			  ::MessageBox(NULL, CString(_T("Elapsed ticks: ")) + buffer, _T("Time"), MB_OK);
+			*/
+
+			// Color and b/w JPEG is supported
+			if (pPixelData != NULL && (nBPP == 3 || nBPP == 1)) {
+				request->Image = new CJPEGImage(nWidth, nHeight, pPixelData,
+								Helpers::FindEXIFBlock(pBuffer, nFileSize), nBPP,
+								Helpers::CalculateJPEGFileHash(pBuffer, nFileSize), IF_JPEG, false, 0, 1, 0);
+				request->Image->SetJPEGComment(Helpers::GetJPEGComment(pBuffer, nFileSize));
+				request->Image->SetJPEGChromoSampling(eChromoSubSampling);
+			} else if (bOutOfMemory) {
+				request->OutOfMemory = true;
+			} else {
+				// failed, try GDI+
+				delete[] pPixelData;
+				IStream* pStream = SHCreateMemStream(pBuffer, nFileSize);
+				if (pStream == nullptr) {
+					request->OutOfMemory = true;
+				} else {
+					ProcessReadWlepGDIPlusRequest(request,
+								      pStream);
+					pStream->Release();
+				}
+			}
+		}
+	} catch (...) {
+		delete request->Image;
+		request->Image = NULL;
+	}
+	if (pBuffer) ::HeapFree(GetProcessHeap(), 0, pBuffer);
+}
+
 void CImageLoadThread::ProcessReadRAWRequest(CRequest * request) {
 	bool bOutOfMemory = false;
 	try {
@@ -495,6 +568,29 @@ void CImageLoadThread::ProcessReadGDIPlusRequest(CRequest * request) {
 		DeleteCachedGDIBitmap();
 	}
 }
+
+void CImageLoadThread::ProcessReadWlepGDIPlusRequest(CRequest * request,
+						     IStream * stream) {
+	const wchar_t* sFileName;
+	sFileName = (const wchar_t*)request->FileName;
+
+	Gdiplus::Bitmap* pBitmap = nullptr;
+	if (sFileName == m_sLastFileName) {
+		pBitmap = m_pLastBitmap;
+	} else {
+		DeleteCachedGDIBitmap();
+		m_pLastBitmap = pBitmap = Gdiplus::Bitmap::FromStream(stream,
+								      CSettingsProvider::This().UseEmbeddedColorProfiles());
+		m_sLastFileName = sFileName;
+	}
+	bool isOutOfMemory, isAnimatedGIF;
+	request->Image = ConvertGDIPlusBitmapToJPEGImage(pBitmap, request->FrameIndex, NULL, 0, isOutOfMemory, isAnimatedGIF);
+	request->OutOfMemory = request->Image == NULL && isOutOfMemory;
+	if (!isAnimatedGIF) {
+		DeleteCachedGDIBitmap();
+	}
+}
+
 
 static unsigned char* alloc(int sizeInBytes) {
 	return new(std::nothrow) unsigned char[sizeInBytes];
